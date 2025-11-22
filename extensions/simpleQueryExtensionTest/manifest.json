@@ -6,7 +6,7 @@
   "content_scripts": [
     {
       "matches": ["*://usflearn.instructure.com/*"],
-      "js": ["content_script.js"]
+      "js": ["canvas-graphql.js", "content_script.js"]
     }
   ],
   "host_permissions": [

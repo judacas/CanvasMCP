@@ -7,6 +7,9 @@
  * from a meta tag in the document.
  */
 
+// Shared module is loaded via manifest.json content_scripts array
+// It will be available as window.CanvasGraphQL after a short delay
+
 /**
  * Creates and manages a UI panel to display results
  */
@@ -276,87 +279,18 @@ function addSection(panel, title, content, isCode = false) {
 
 /**
  * Attempts to find the CSRF token from various sources on the page
+ * Uses shared module but maintains original UI behavior
  */
 function findCSRFToken(panel) {
-    // Try multiple common ways Canvas stores CSRF tokens
-    const methods = [
-        {
-            name: 'meta[name="csrf-token"]',
-            fn: () => {
-                const meta = document.querySelector('meta[name="csrf-token"]');
-                return meta ? meta.content : null;
-            }
-        },
-        {
-            name: 'meta[name="csrf_token"]',
-            fn: () => {
-                const meta = document.querySelector('meta[name="csrf_token"]');
-                return meta ? meta.content : null;
-            }
-        },
-        {
-            name: '[data-csrf-token]',
-            fn: () => {
-                const element = document.querySelector('[data-csrf-token]');
-                return element ? element.getAttribute('data-csrf-token') : null;
-            }
-        },
-        {
-            name: 'window.ENV.CSRF_TOKEN',
-            fn: () => {
-                if (window.ENV && window.ENV.CSRF_TOKEN) {
-                    return window.ENV.CSRF_TOKEN;
-                }
-                return null;
-            }
-        },
-        {
-            name: 'cookies',
-            fn: () => {
-                const cookies = document.cookie.split(';');
-                for (let cookie of cookies) {
-                    const [name, value] = cookie.trim().split('=');
-                    if (name === '_csrf_token' || name === 'csrf_token') {
-                        return value;
-                    }
-                }
-                return null;
-            }
-        }
-    ];
-
-    for (let method of methods) {
-        try {
-            let token = method.fn();
-            if (token) {
-                // Decode URL-encoded tokens (Canvas sometimes stores them encoded)
-                if (token.includes('%')) {
-                    try {
-                        token = decodeURIComponent(token);
-                        if (panel) {
-                            addStatus(panel, `✓ Found and decoded CSRF token via: ${method.name}`, 'success');
-                        }
-                        console.log('Found and decoded CSRF token via:', method.name);
-                    } catch (e) {
-                        if (panel) {
-                            addStatus(panel, `✓ Found CSRF token via: ${method.name} (could not decode, using as-is)`, 'success');
-                        }
-                        console.log('Found CSRF token via:', method.name, '(could not decode, using as-is)');
-                    }
-                } else {
-                    if (panel) {
-                        addStatus(panel, `✓ Found CSRF token via: ${method.name}`, 'success');
-                    }
-                    console.log('Found CSRF token via:', method.name);
-                }
-                return token;
-            }
-        } catch (e) {
-            console.debug('CSRF token method failed:', e);
-        }
+    // Use shared module function
+    const token = window.CanvasGraphQL ? window.CanvasGraphQL.findCSRFToken() : null;
+    
+    // Maintain original UI behavior by showing status messages
+    if (token && panel) {
+        addStatus(panel, `✓ Found CSRF token`, 'success');
     }
-
-    return null;
+    
+    return token;
 }
 
 async function sendGraphQLRequest(customQuery = null, panel = null) {
@@ -378,16 +312,6 @@ async function sendGraphQLRequest(customQuery = null, panel = null) {
     // 1. Get the X-CSRF-Token from various sources
     addStatus(panel, 'Searching for CSRF token...', 'info');
     let csrfToken = findCSRFToken(panel);
-
-    // Ensure token is decoded if it was URL encoded
-    if (csrfToken && csrfToken.includes('%')) {
-        try {
-            csrfToken = decodeURIComponent(csrfToken);
-            console.log('Decoded CSRF token');
-        } catch (e) {
-            console.warn('Could not decode CSRF token, using as-is');
-        }
-    }
 
     if (!csrfToken) {
         addStatus(panel, '⚠ X-CSRF-Token not found. Attempting request without it (may fail).', 'warning');
@@ -504,94 +428,34 @@ async function sendGraphQLRequest(customQuery = null, panel = null) {
     `;
     }
 
-    const requestBody = {
-        query: graphqlQuery.trim(), // Remove leading/trailing whitespace
-        // variables: {} // Add variables here if your GraphQL query uses them
-    };
-
-    // 3. Construct and send the fetch request.
-    //    - method: 'POST' for GraphQL mutations/queries.
-    //    - headers: 'Content-Type' and optionally 'X-CSRF-Token'.
-    //      The 'Cookie' header will be sent automatically by the browser for same-origin requests.
-    //    - credentials: 'include' ensures cookies are sent, though often default for same-origin.
+    // 3. Use shared module to execute query, but maintain original UI behavior
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-            // The browser will automatically add the 'Cookie' header for usflearn.instructure.com
-            // as this content script runs in its context.
-            'Accept': 'application/json+canvas-string-ids, application/json, text/plain, */*',
-            'X-Requested-With': 'XMLHttpRequest', // Often expected by Canvas
-            'Origin': 'https://usflearn.instructure.com',
-            'Referer': window.location.href, // Use current page as referer
-        };
-
-        // Only add CSRF token if we found it
-        if (csrfToken) {
-            headers['X-CSRF-Token'] = csrfToken;
-        }
-
+        // Show request details in UI
         addStatus(panel, 'Making GraphQL request...', 'info');
         addSection(panel, 'Request URL', graphqlEndpoint, true);
+        
+        // Get CSRF token for display
+        const csrfTokenForDisplay = findCSRFToken();
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json+canvas-string-ids, application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Origin': 'https://usflearn.instructure.com',
+            'Referer': window.location.href,
+            ...(csrfTokenForDisplay && { 'X-CSRF-Token': csrfTokenForDisplay })
+        };
         addSection(panel, 'Request Headers', JSON.stringify(headers, null, 2), true);
         console.log('Making GraphQL request with headers:', Object.keys(headers));
 
-        const response = await fetch(graphqlEndpoint, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(requestBody),
-            credentials: 'include' // Important to send cookies
-        });
-
-        // Log request details for debugging
-        console.log('Request URL:', graphqlEndpoint);
-        console.log('Request method: POST');
-        console.log('Request headers:', headers);
-        console.log('Request body:', JSON.stringify(requestBody, null, 2));
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            addStatus(panel, `✗ Request failed: ${response.status} ${response.statusText}`, 'error');
-            addSection(panel, 'Error Response', errorText, true);
-            console.error(`GraphQL request failed with status: ${response.status} ${response.statusText}`);
-            console.error('Error response:', errorText);
-            
-            // Try to parse error for more details
-            try {
-                const errorData = JSON.parse(errorText);
-                addSection(panel, 'Parsed Error Data', JSON.stringify(errorData, null, 2), true);
-                console.error('Parsed error data:', errorData);
-                
-                // Check if it's a CSRF token issue
-                if (response.status === 403 || response.status === 422) {
-                    const troubleshooting = [
-                        '1. CSRF token may be invalid or expired',
-                        '2. CSRF token may need to be decoded (check if it contains %2F or similar)',
-                        '3. Request format may be incorrect',
-                        '4. Query syntax may be invalid',
-                        '',
-                        '💡 Try:',
-                        '- Refresh the page to get a new CSRF token',
-                        '- Check Network tab in DevTools to see how Canvas makes requests',
-                        '- Verify the GraphQL query syntax is correct'
-                    ].join('\n');
-                    addSection(panel, 'Troubleshooting Tips', troubleshooting, false);
-                    console.error('\n⚠️ Possible issues:');
-                    console.error('1. CSRF token may be invalid or expired');
-                    console.error('2. CSRF token may need to be decoded (check if it contains %2F or similar)');
-                    console.error('3. Request format may be incorrect');
-                    console.error('4. Query syntax may be invalid');
-                    console.error('\n💡 Try:');
-                    console.error('- Refresh the page to get a new CSRF token');
-                    console.error('- Check Network tab in DevTools to see how Canvas makes requests');
-                    console.error('- Verify the GraphQL query syntax is correct');
-                }
-            } catch (e) {
-                // Error is not JSON, that's fine
-            }
-            return;
+        // Use shared module to execute query
+        let data;
+        if (window.CanvasGraphQL && window.CanvasGraphQL.executeGraphQLQuery) {
+            data = await window.CanvasGraphQL.executeGraphQLQuery(graphqlQuery, graphqlEndpoint);
+        } else {
+            // Fallback to original implementation if shared module not loaded
+            throw new Error('Shared Canvas GraphQL module not loaded');
         }
 
-        const data = await response.json();
         addStatus(panel, '✓ Request successful!', 'success');
         addSection(panel, 'Response Data', JSON.stringify(data, null, 2), true);
         
@@ -627,13 +491,38 @@ async function sendGraphQLRequest(customQuery = null, panel = null) {
         }
         
         console.log('GraphQL Response:', data);
-        // You can now process the 'data' object here.
-        // For example, if you wanted to display schema types:
-        // console.log('Schema Types:', data.data.__schema.types.map(type => type.name));
 
     } catch (error) {
         addStatus(panel, `✗ Error: ${error.message}`, 'error');
-        addSection(panel, 'Error Details', error.stack || String(error), true);
+        
+        // Handle error response details
+        if (error.status) {
+            addStatus(panel, `✗ Request failed: ${error.status} ${error.statusText}`, 'error');
+            if (error.rawResponse) {
+                addSection(panel, 'Error Response', error.rawResponse, true);
+            }
+            if (error.data) {
+                addSection(panel, 'Parsed Error Data', JSON.stringify(error.data, null, 2), true);
+            }
+            
+            // Check if it's a CSRF token issue
+            if (error.status === 403 || error.status === 422) {
+                const troubleshooting = [
+                    '1. CSRF token may be invalid or expired',
+                    '2. CSRF token may need to be decoded (check if it contains %2F or similar)',
+                    '3. Request format may be incorrect',
+                    '4. Query syntax may be invalid',
+                    '',
+                    '💡 Try:',
+                    '- Refresh the page to get a new CSRF token',
+                    '- Check Network tab in DevTools to see how Canvas makes requests',
+                    '- Verify the GraphQL query syntax is correct'
+                ].join('\n');
+                addSection(panel, 'Troubleshooting Tips', troubleshooting, false);
+            }
+        } else {
+            addSection(panel, 'Error Details', error.stack || String(error), true);
+        }
         console.error('Error making GraphQL request:', error);
     }
 }

@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Canvas GraphQL Query Forwarder",
+  "version": "1.0",
+  "description": "Forwards GraphQL queries from backend to Canvas API using browser cookies",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.instructure.com/*"],
+      "js": ["canvas-graphql.js", "content_script.js"]
+    }
+  ],
+  "permissions": [
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.instructure.com/*"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "*://localhost/*",
+      "*://127.0.0.1/*"
+    ]
+  }
+}
+
