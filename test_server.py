@@ -198,13 +198,18 @@ class QueryHandler(BaseHTTPRequestHandler):
             # Debug: Check what we actually got
             if not result_obj:
                 raise Exception(f"Empty result object. Full response: {json.dumps(response, indent=2)}")
+            
+            # Handle nested result structure (sometimes CDP nests it)
+            if 'result' in result_obj and isinstance(result_obj.get('result'), dict):
+                result_obj = result_obj['result']
+            
             if result_obj.get('exceptionDetails'):
                 exception = result_obj.get('exceptionDetails', {})
                 error_msg = exception.get('exception', {}).get('description', 'Unknown error')
                 raise Exception(f"Script execution error: {error_msg}")
             
             # Get the value - it should be a JSON string
-            # CDP returns result as: {"result": {"type": "string", "value": "..."}}
+            # CDP returns result as: {"type": "string", "value": "..."}
             result_type = result_obj.get('type', 'unknown')
             
             # Check if 'value' key exists (even if it's an empty string)
