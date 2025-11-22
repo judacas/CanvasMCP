@@ -8,58 +8,266 @@
  */
 
 /**
+ * Creates and manages a UI panel to display results
+ */
+function createResultPanel() {
+    // Remove existing panel if it exists
+    const existing = document.getElementById('canvas-graphql-result-panel');
+    if (existing) {
+        existing.remove();
+    }
+
+    const panel = document.createElement('div');
+    panel.id = 'canvas-graphql-result-panel';
+    panel.innerHTML = `
+        <div class="canvas-graphql-header">
+            <h3>Canvas GraphQL Query Results</h3>
+            <button class="canvas-graphql-close" id="canvas-graphql-close-btn">×</button>
+        </div>
+        <div class="canvas-graphql-content" id="canvas-graphql-content">
+            <div class="canvas-graphql-status">Initializing...</div>
+        </div>
+    `;
+
+    // Add styles
+    const style = document.createElement('style');
+    style.textContent = `
+        #canvas-graphql-result-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 600px;
+            max-height: 80vh;
+            background: white;
+            border: 2px solid #2d3b45;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+        .canvas-graphql-header {
+            background: #2d3b45;
+            color: white;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 6px 6px 0 0;
+        }
+        .canvas-graphql-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .canvas-graphql-close {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .canvas-graphql-close:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .canvas-graphql-content {
+            padding: 16px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .canvas-graphql-status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .canvas-graphql-status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+        .canvas-graphql-status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+            border-left: 4px solid #388e3c;
+        }
+        .canvas-graphql-status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+        .canvas-graphql-status.warning {
+            background: #fff3e0;
+            color: #f57c00;
+            border-left: 4px solid #f57c00;
+        }
+        .canvas-graphql-section {
+            margin-bottom: 16px;
+        }
+        .canvas-graphql-section-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #2d3b45;
+            font-size: 14px;
+        }
+        .canvas-graphql-code {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .canvas-graphql-data {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .canvas-graphql-data pre {
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    `;
+    document.head.appendChild(style);
+    document.body.appendChild(panel);
+
+    // Close button functionality
+    document.getElementById('canvas-graphql-close-btn').addEventListener('click', () => {
+        panel.remove();
+    });
+
+    return panel;
+}
+
+function updatePanel(panel, content) {
+    const contentDiv = document.getElementById('canvas-graphql-content');
+    if (contentDiv) {
+        contentDiv.innerHTML = content;
+    }
+}
+
+function addStatus(panel, message, type = 'info') {
+    const contentDiv = document.getElementById('canvas-graphql-content');
+    if (contentDiv) {
+        const statusDiv = document.createElement('div');
+        statusDiv.className = `canvas-graphql-status ${type}`;
+        statusDiv.textContent = message;
+        contentDiv.appendChild(statusDiv);
+        // Auto-scroll to bottom
+        contentDiv.scrollTop = contentDiv.scrollHeight;
+    }
+}
+
+function addSection(panel, title, content, isCode = false) {
+    const contentDiv = document.getElementById('canvas-graphql-content');
+    if (contentDiv) {
+        const section = document.createElement('div');
+        section.className = 'canvas-graphql-section';
+        section.innerHTML = `
+            <div class="canvas-graphql-section-title">${title}</div>
+            <div class="${isCode ? 'canvas-graphql-code' : 'canvas-graphql-data'}">${content}</div>
+        `;
+        contentDiv.appendChild(section);
+        // Auto-scroll to bottom
+        contentDiv.scrollTop = contentDiv.scrollHeight;
+    }
+}
+
+/**
  * Attempts to find the CSRF token from various sources on the page
  */
-function findCSRFToken() {
+function findCSRFToken(panel) {
     // Try multiple common ways Canvas stores CSRF tokens
     const methods = [
-        () => {
-            const meta = document.querySelector('meta[name="csrf-token"]');
-            return meta ? meta.content : null;
-        },
-        () => {
-            const meta = document.querySelector('meta[name="csrf_token"]');
-            return meta ? meta.content : null;
-        },
-        () => {
-            // Sometimes in data attributes
-            const element = document.querySelector('[data-csrf-token]');
-            return element ? element.getAttribute('data-csrf-token') : null;
-        },
-        () => {
-            // Check if Canvas exposes it via window object
-            if (window.ENV && window.ENV.CSRF_TOKEN) {
-                return window.ENV.CSRF_TOKEN;
+        {
+            name: 'meta[name="csrf-token"]',
+            fn: () => {
+                const meta = document.querySelector('meta[name="csrf-token"]');
+                return meta ? meta.content : null;
             }
-            return null;
         },
-        () => {
-            // Check cookies (though this might not work in content scripts)
-            const cookies = document.cookie.split(';');
-            for (let cookie of cookies) {
-                const [name, value] = cookie.trim().split('=');
-                if (name === '_csrf_token' || name === 'csrf_token') {
-                    return value;
+        {
+            name: 'meta[name="csrf_token"]',
+            fn: () => {
+                const meta = document.querySelector('meta[name="csrf_token"]');
+                return meta ? meta.content : null;
+            }
+        },
+        {
+            name: '[data-csrf-token]',
+            fn: () => {
+                const element = document.querySelector('[data-csrf-token]');
+                return element ? element.getAttribute('data-csrf-token') : null;
+            }
+        },
+        {
+            name: 'window.ENV.CSRF_TOKEN',
+            fn: () => {
+                if (window.ENV && window.ENV.CSRF_TOKEN) {
+                    return window.ENV.CSRF_TOKEN;
                 }
+                return null;
             }
-            return null;
+        },
+        {
+            name: 'cookies',
+            fn: () => {
+                const cookies = document.cookie.split(';');
+                for (let cookie of cookies) {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name === '_csrf_token' || name === 'csrf_token') {
+                        return value;
+                    }
+                }
+                return null;
+            }
         }
     ];
 
     for (let method of methods) {
         try {
-            let token = method();
+            let token = method.fn();
             if (token) {
                 // Decode URL-encoded tokens (Canvas sometimes stores them encoded)
                 if (token.includes('%')) {
                     try {
                         token = decodeURIComponent(token);
-                        console.log('Found and decoded CSRF token via:', method.name || 'unknown method');
+                        if (panel) {
+                            addStatus(panel, `✓ Found and decoded CSRF token via: ${method.name}`, 'success');
+                        }
+                        console.log('Found and decoded CSRF token via:', method.name);
                     } catch (e) {
-                        console.log('Found CSRF token via:', method.name || 'unknown method', '(could not decode, using as-is)');
+                        if (panel) {
+                            addStatus(panel, `✓ Found CSRF token via: ${method.name} (could not decode, using as-is)`, 'success');
+                        }
+                        console.log('Found CSRF token via:', method.name, '(could not decode, using as-is)');
                     }
                 } else {
-                    console.log('Found CSRF token via:', method.name || 'unknown method');
+                    if (panel) {
+                        addStatus(panel, `✓ Found CSRF token via: ${method.name}`, 'success');
+                    }
+                    console.log('Found CSRF token via:', method.name);
                 }
                 return token;
             }
@@ -73,9 +281,14 @@ function findCSRFToken() {
 
 async function sendGraphQLIntrospectionRequest() {
     const graphqlEndpoint = 'https://usflearn.instructure.com/api/graphql';
+    
+    // Create the result panel
+    const panel = createResultPanel();
+    addStatus(panel, 'Starting GraphQL introspection query...', 'info');
 
     // 1. Get the X-CSRF-Token from various sources
-    let csrfToken = findCSRFToken();
+    addStatus(panel, 'Searching for CSRF token...', 'info');
+    let csrfToken = findCSRFToken(panel);
 
     // Ensure token is decoded if it was URL encoded
     if (csrfToken && csrfToken.includes('%')) {
@@ -88,12 +301,16 @@ async function sendGraphQLIntrospectionRequest() {
     }
 
     if (!csrfToken) {
+        addStatus(panel, '⚠ X-CSRF-Token not found. Attempting request without it (may fail).', 'warning');
         console.warn('X-CSRF-Token not found. Attempting request without it (may fail).');
-        console.log('Available meta tags:', Array.from(document.querySelectorAll('meta')).map(m => ({
+        const metaTags = Array.from(document.querySelectorAll('meta')).map(m => ({
             name: m.getAttribute('name'),
             content: m.getAttribute('content')?.substring(0, 20) + '...'
-        })));
+        }));
+        addSection(panel, 'Available Meta Tags', JSON.stringify(metaTags, null, 2), true);
+        console.log('Available meta tags:', metaTags);
     } else {
+        addStatus(panel, `✓ CSRF Token found: ${csrfToken.substring(0, 30)}...`, 'success');
         console.log('CSRF Token found:', csrfToken.substring(0, 30) + '...');
     }
 
@@ -219,6 +436,9 @@ async function sendGraphQLIntrospectionRequest() {
             headers['X-CSRF-Token'] = csrfToken;
         }
 
+        addStatus(panel, 'Making GraphQL request...', 'info');
+        addSection(panel, 'Request URL', graphqlEndpoint, true);
+        addSection(panel, 'Request Headers', JSON.stringify(headers, null, 2), true);
         console.log('Making GraphQL request with headers:', Object.keys(headers));
 
         const response = await fetch(graphqlEndpoint, {
@@ -235,17 +455,32 @@ async function sendGraphQLIntrospectionRequest() {
         console.log('Request body:', JSON.stringify(requestBody, null, 2));
         
         if (!response.ok) {
-            console.error(`GraphQL request failed with status: ${response.status} ${response.statusText}`);
             const errorText = await response.text();
+            addStatus(panel, `✗ Request failed: ${response.status} ${response.statusText}`, 'error');
+            addSection(panel, 'Error Response', errorText, true);
+            console.error(`GraphQL request failed with status: ${response.status} ${response.statusText}`);
             console.error('Error response:', errorText);
             
             // Try to parse error for more details
             try {
                 const errorData = JSON.parse(errorText);
+                addSection(panel, 'Parsed Error Data', JSON.stringify(errorData, null, 2), true);
                 console.error('Parsed error data:', errorData);
                 
                 // Check if it's a CSRF token issue
                 if (response.status === 403 || response.status === 422) {
+                    const troubleshooting = [
+                        '1. CSRF token may be invalid or expired',
+                        '2. CSRF token may need to be decoded (check if it contains %2F or similar)',
+                        '3. Request format may be incorrect',
+                        '4. Query syntax may be invalid',
+                        '',
+                        '💡 Try:',
+                        '- Refresh the page to get a new CSRF token',
+                        '- Check Network tab in DevTools to see how Canvas makes requests',
+                        '- Verify the GraphQL query syntax is correct'
+                    ].join('\n');
+                    addSection(panel, 'Troubleshooting Tips', troubleshooting, false);
                     console.error('\n⚠️ Possible issues:');
                     console.error('1. CSRF token may be invalid or expired');
                     console.error('2. CSRF token may need to be decoded (check if it contains %2F or similar)');
@@ -263,12 +498,30 @@ async function sendGraphQLIntrospectionRequest() {
         }
 
         const data = await response.json();
+        addStatus(panel, '✓ Request successful!', 'success');
+        addSection(panel, 'Response Data', JSON.stringify(data, null, 2), true);
+        
+        // Display schema summary if available
+        if (data.data && data.data.__schema) {
+            const schema = data.data.__schema;
+            const summary = {
+                queryType: schema.queryType?.name || 'N/A',
+                mutationType: schema.mutationType?.name || 'N/A',
+                subscriptionType: schema.subscriptionType?.name || 'N/A',
+                totalTypes: schema.types?.length || 0,
+                typeNames: schema.types?.slice(0, 20).map(t => t.name).filter(Boolean) || []
+            };
+            addSection(panel, 'Schema Summary', JSON.stringify(summary, null, 2), false);
+        }
+        
         console.log('GraphQL Response:', data);
         // You can now process the 'data' object here.
         // For example, if you wanted to display schema types:
         // console.log('Schema Types:', data.data.__schema.types.map(type => type.name));
 
     } catch (error) {
+        addStatus(panel, `✗ Error: ${error.message}`, 'error');
+        addSection(panel, 'Error Details', error.stack || String(error), true);
         console.error('Error making GraphQL request:', error);
     }
 }
