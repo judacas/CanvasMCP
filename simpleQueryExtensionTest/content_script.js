@@ -21,11 +21,16 @@ function createResultPanel() {
     panel.id = 'canvas-graphql-result-panel';
     panel.innerHTML = `
         <div class="canvas-graphql-header">
-            <h3>Canvas GraphQL Query Results</h3>
+            <h3>Canvas GraphQL Query</h3>
             <button class="canvas-graphql-close" id="canvas-graphql-close-btn">×</button>
         </div>
         <div class="canvas-graphql-content" id="canvas-graphql-content">
-            <div class="canvas-graphql-status">Initializing...</div>
+            <div class="canvas-graphql-query-form">
+                <label for="canvas-graphql-query-input" class="canvas-graphql-label">Enter your GraphQL query:</label>
+                <textarea id="canvas-graphql-query-input" class="canvas-graphql-textarea" placeholder="query { ... }"></textarea>
+                <button id="canvas-graphql-submit-btn" class="canvas-graphql-submit-btn">Submit Query</button>
+            </div>
+            <div id="canvas-graphql-results" style="display: none;"></div>
         </div>
     `;
 
@@ -148,6 +153,55 @@ function createResultPanel() {
             white-space: pre-wrap;
             word-break: break-word;
         }
+        .canvas-graphql-query-form {
+            margin-bottom: 16px;
+        }
+        .canvas-graphql-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #2d3b45;
+            font-size: 14px;
+        }
+        .canvas-graphql-textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+        }
+        .canvas-graphql-textarea:focus {
+            outline: none;
+            border-color: #2d3b45;
+            box-shadow: 0 0 0 2px rgba(45, 59, 69, 0.1);
+        }
+        .canvas-graphql-submit-btn {
+            background: #2d3b45;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        .canvas-graphql-submit-btn:hover {
+            background: #1a2329;
+        }
+        .canvas-graphql-submit-btn:active {
+            background: #0f1417;
+        }
+        .canvas-graphql-submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
     `;
     document.head.appendChild(style);
     document.body.appendChild(panel);
@@ -155,6 +209,32 @@ function createResultPanel() {
     // Close button functionality
     document.getElementById('canvas-graphql-close-btn').addEventListener('click', () => {
         panel.remove();
+    });
+
+    // Submit button functionality
+    const submitBtn = document.getElementById('canvas-graphql-submit-btn');
+    const queryInput = document.getElementById('canvas-graphql-query-input');
+    
+    submitBtn.addEventListener('click', () => {
+        const query = queryInput.value.trim();
+        if (!query) {
+            alert('Please enter a GraphQL query');
+            return;
+        }
+        // Show results area and hide form
+        document.getElementById('canvas-graphql-results').style.display = 'block';
+        document.querySelector('.canvas-graphql-query-form').style.display = 'none';
+        // Clear previous results
+        document.getElementById('canvas-graphql-results').innerHTML = '';
+        // Execute the query
+        sendGraphQLRequest(query, panel);
+    });
+
+    // Allow Ctrl+Enter to submit
+    queryInput.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+            submitBtn.click();
+        }
     });
 
     return panel;
@@ -168,29 +248,29 @@ function updatePanel(panel, content) {
 }
 
 function addStatus(panel, message, type = 'info') {
-    const contentDiv = document.getElementById('canvas-graphql-content');
-    if (contentDiv) {
+    const resultsDiv = document.getElementById('canvas-graphql-results');
+    if (resultsDiv) {
         const statusDiv = document.createElement('div');
         statusDiv.className = `canvas-graphql-status ${type}`;
         statusDiv.textContent = message;
-        contentDiv.appendChild(statusDiv);
+        resultsDiv.appendChild(statusDiv);
         // Auto-scroll to bottom
-        contentDiv.scrollTop = contentDiv.scrollHeight;
+        resultsDiv.scrollTop = resultsDiv.scrollHeight;
     }
 }
 
 function addSection(panel, title, content, isCode = false) {
-    const contentDiv = document.getElementById('canvas-graphql-content');
-    if (contentDiv) {
+    const resultsDiv = document.getElementById('canvas-graphql-results');
+    if (resultsDiv) {
         const section = document.createElement('div');
         section.className = 'canvas-graphql-section';
         section.innerHTML = `
             <div class="canvas-graphql-section-title">${title}</div>
             <div class="${isCode ? 'canvas-graphql-code' : 'canvas-graphql-data'}">${content}</div>
         `;
-        contentDiv.appendChild(section);
+        resultsDiv.appendChild(section);
         // Auto-scroll to bottom
-        contentDiv.scrollTop = contentDiv.scrollHeight;
+        resultsDiv.scrollTop = resultsDiv.scrollHeight;
     }
 }
 
@@ -279,12 +359,21 @@ function findCSRFToken(panel) {
     return null;
 }
 
-async function sendGraphQLIntrospectionRequest() {
+async function sendGraphQLRequest(customQuery = null, panel = null) {
     const graphqlEndpoint = 'https://usflearn.instructure.com/api/graphql';
     
-    // Create the result panel
-    const panel = createResultPanel();
-    addStatus(panel, 'Starting GraphQL introspection query...', 'info');
+    // Create the result panel if not provided
+    if (!panel) {
+        panel = createResultPanel();
+    }
+    
+    // Use custom query or default introspection query
+    const useCustomQuery = customQuery !== null;
+    if (useCustomQuery) {
+        addStatus(panel, 'Starting custom GraphQL query...', 'info');
+    } else {
+        addStatus(panel, 'Starting GraphQL introspection query...', 'info');
+    }
 
     // 1. Get the X-CSRF-Token from various sources
     addStatus(panel, 'Searching for CSRF token...', 'info');
@@ -314,9 +403,13 @@ async function sendGraphQLIntrospectionRequest() {
         console.log('CSRF Token found:', csrfToken.substring(0, 30) + '...');
     }
 
-    // 2. Define the GraphQL introspection query.
-    //    This query is taken directly from the previous interaction's response body.
-    const introspectionQuery = `
+    // 2. Use custom query or default introspection query
+    let graphqlQuery;
+    if (useCustomQuery) {
+        graphqlQuery = customQuery;
+    } else {
+        // Default introspection query
+        graphqlQuery = `
         query IntrospectionQuery {
           __schema {
             queryType { name }
@@ -409,9 +502,10 @@ async function sendGraphQLIntrospectionRequest() {
           }
         }
     `;
+    }
 
     const requestBody = {
-        query: introspectionQuery.trim(), // Remove leading/trailing whitespace
+        query: graphqlQuery.trim(), // Remove leading/trailing whitespace
         // variables: {} // Add variables here if your GraphQL query uses them
     };
 
@@ -514,6 +608,24 @@ async function sendGraphQLIntrospectionRequest() {
             addSection(panel, 'Schema Summary', JSON.stringify(summary, null, 2), false);
         }
         
+        // Add "New Query" button
+        const resultsDiv = document.getElementById('canvas-graphql-results');
+        if (resultsDiv) {
+            const newQueryBtn = document.createElement('button');
+            newQueryBtn.className = 'canvas-graphql-submit-btn';
+            newQueryBtn.textContent = 'New Query';
+            newQueryBtn.style.marginTop = '16px';
+            newQueryBtn.addEventListener('click', () => {
+                // Show form and hide results
+                document.querySelector('.canvas-graphql-query-form').style.display = 'block';
+                document.getElementById('canvas-graphql-results').style.display = 'none';
+                document.getElementById('canvas-graphql-results').innerHTML = '';
+                // Clear the textarea
+                document.getElementById('canvas-graphql-query-input').value = '';
+            });
+            resultsDiv.appendChild(newQueryBtn);
+        }
+        
         console.log('GraphQL Response:', data);
         // You can now process the 'data' object here.
         // For example, if you wanted to display schema types:
@@ -526,13 +638,17 @@ async function sendGraphQLIntrospectionRequest() {
     }
 }
 
-// Execute the function when the page is ready
+// Create the panel when the page is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         // Wait a bit for Canvas to fully initialize
-        setTimeout(sendGraphQLIntrospectionRequest, 1000);
+        setTimeout(() => {
+            createResultPanel();
+        }, 1000);
     });
 } else {
     // DOM is already ready, but wait a bit for Canvas to initialize
-    setTimeout(sendGraphQLIntrospectionRequest, 1000);
+    setTimeout(() => {
+        createResultPanel();
+    }, 1000);
 }
