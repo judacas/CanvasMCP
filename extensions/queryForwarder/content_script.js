@@ -56,6 +56,39 @@ async function handleQueryExecution(query, variables = {}, endpoint = null) {
     return result;
 }
 
+// Listen for postMessage from any page (for testing/HTTP API)
+window.addEventListener('message', async (event) => {
+    // Only accept messages from same origin or localhost (for testing)
+    if (event.data && event.data.type === 'QUERY_FORWARDER_REQUEST') {
+        const { query, variables, endpoint, requestId } = event.data;
+        
+        try {
+            const result = await handleQueryExecution(query, variables, endpoint);
+            
+            // Send response back via postMessage
+            window.postMessage({
+                type: 'QUERY_FORWARDER_RESPONSE',
+                requestId: requestId,
+                success: true,
+                data: result
+            }, '*');
+        } catch (error) {
+            window.postMessage({
+                type: 'QUERY_FORWARDER_RESPONSE',
+                requestId: requestId,
+                success: false,
+                error: {
+                    message: error.message,
+                    status: error.status,
+                    statusText: error.statusText,
+                    data: error.data,
+                    rawResponse: error.rawResponse
+                }
+            }, '*');
+        }
+    }
+});
+
 // Log that content script is loaded
 console.log('QueryForwarder content script loaded and ready to execute queries');
 
