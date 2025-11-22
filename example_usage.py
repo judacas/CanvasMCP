@@ -3,11 +3,19 @@
 Example usage of the queryForwarder HTTP API.
 
 Prerequisites:
-1. Start Chrome with: chrome.exe --remote-debugging-port=9222
+1. Start Chrome with remote debugging:
+   Windows: Run start_chrome_debug.bat OR manually:
+     "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --remote-allow-origins=*
+   Mac/Linux: google-chrome --remote-debugging-port=9222 --remote-allow-origins=*
 2. Open a Canvas page (usflearn.instructure.com) and log in
 3. Load the queryForwarder extension
 4. Start the test server: python test_server.py
 5. Run this script: python example_usage.py
+
+Why remote debugging?
+The test_server.py uses Chrome DevTools Protocol (CDP) to inject JavaScript
+into the Canvas page, which communicates with the extension to execute
+GraphQL queries using your browser's authentication cookies.
 """
 
 import requests

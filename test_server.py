@@ -79,7 +79,7 @@ class QueryHandler(BaseHTTPRequestHandler):
         except Exception as e:
             raise Exception(
                 f"Could not connect to Chrome DevTools Protocol on port 9222.\n"
-                f"Start Chrome with: chrome.exe --remote-debugging-port=9222\n"
+                f"Start Chrome with: chrome.exe --remote-debugging-port=9222 --remote-allow-origins=*\n"
                 f"Error: {e}"
             )
         
@@ -115,18 +115,34 @@ class QueryHandler(BaseHTTPRequestHandler):
                     const variables = {json.dumps(variables)};
                     const endpoint = {json.dumps(endpoint)};
                     
-                    // Set up listener
+                    let resolved = false;
+                    let timeoutId = null;
+                    
+                    // Set up listener BEFORE sending message
                     const listener = (event) => {{
+                        // Log all messages for debugging
+                        if (event.data && event.data.type) {{
+                            console.log('[Injected Script] Received message type:', event.data.type, 'requestId:', event.data.requestId, 'expected:', requestId);
+                        }}
+                        
                         if (event.data && event.data.type === 'QUERY_FORWARDER_RESPONSE' && 
                             event.data.requestId === requestId) {{
-                            window.removeEventListener('message', listener);
-                            resolve(JSON.stringify(event.data));
+                            if (!resolved) {{
+                                resolved = true;
+                                if (timeoutId) clearTimeout(timeoutId);
+                                window.removeEventListener('message', listener);
+                                console.log('[Injected Script] Resolving with result:', event.data);
+                                resolve(JSON.stringify(event.data));
+                            }}
                         }}
                     }};
                     
+                    // Add listener first
                     window.addEventListener('message', listener);
+                    console.log('[Injected Script] Listener registered, requestId:', requestId);
                     
-                    // Send request
+                    // Send request immediately (listener is already set up)
+                    console.log('[Injected Script] Sending QUERY_FORWARDER_REQUEST');
                     window.postMessage({{
                         type: 'QUERY_FORWARDER_REQUEST',
                         query: query,
@@ -135,10 +151,25 @@ class QueryHandler(BaseHTTPRequestHandler):
                         requestId: requestId
                     }}, '*');
                     
+                    // Also try dispatching a custom event to ensure content script sees it
+                    window.dispatchEvent(new CustomEvent('queryForwarderRequest', {{
+                        detail: {{
+                            type: 'QUERY_FORWARDER_REQUEST',
+                            query: query,
+                            variables: variables,
+                            endpoint: endpoint,
+                            requestId: requestId
+                        }}
+                    }}));
+                    
                     // Timeout
-                    setTimeout(() => {{
-                        window.removeEventListener('message', listener);
-                        reject(new Error('Timeout waiting for extension response'));
+                    timeoutId = setTimeout(() => {{
+                        if (!resolved) {{
+                            resolved = true;
+                            window.removeEventListener('message', listener);
+                            console.error('[Injected Script] Timeout - no response received');
+                            reject(new Error('Timeout waiting for extension response after 30 seconds. Check browser console for details.'));
+                        }}
                     }}, 30000);
                 }});
             }})()
@@ -161,12 +192,24 @@ class QueryHandler(BaseHTTPRequestHandler):
             if 'error' in response:
                 raise Exception(f"CDP Error: {response['error']}")
             
-            result_str = response.get('result', {}).get('value', '')
+            # Check for exception in the result
+            result_obj = response.get('result', {})
+            if result_obj.get('exceptionDetails'):
+                exception = result_obj.get('exceptionDetails', {})
+                error_msg = exception.get('exception', {}).get('description', 'Unknown error')
+                raise Exception(f"Script execution error: {error_msg}")
+            
+            result_str = result_obj.get('value', '')
             if result_str:
-                result = json.loads(result_str)
-                return result
+                try:
+                    result = json.loads(result_str)
+                    return result
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Failed to parse result as JSON: {result_str[:200]}... Error: {e}")
             else:
-                raise Exception("No result from extension")
+                # Get more details about what was returned
+                result_type = result_obj.get('type', 'unknown')
+                raise Exception(f"No result from extension. Result type: {result_type}, Full response: {json.dumps(result_obj, indent=2)[:500]}")
                 
         finally:
             ws.close()
@@ -183,7 +226,7 @@ def run_server(port=8765):
     print(f"\nServer running on http://localhost:{port}")
     print("\nPrerequisites:")
     print("1. Start Chrome with remote debugging:")
-    print("   chrome.exe --remote-debugging-port=9222")
+    print("   chrome.exe --remote-debugging-port=9222 --remote-allow-origins=*")
     print("2. Open a Canvas page (usflearn.instructure.com)")
     print("3. Load the queryForwarder extension")
     print("\nTest endpoint: POST http://localhost:{port}/execute-query")
