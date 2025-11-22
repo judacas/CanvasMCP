@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Canvas GraphQL Interceptor",
+  "version": "1.0",
+  "description": "Demonstrates GraphQL request from a content script on Canvas.",
+  "content_scripts": [
+    {
+      "matches": ["*://usflearn.instructure.com/*"],
+      "js": ["content_script.js"]
+    }
+  ],
+  "host_permissions": [
+    "*://usflearn.instructure.com/*"
+  ]
+}

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 500px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    .input-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 15px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f9f9f9;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .error {
+      color: red;
+      border-color: red;
+      background-color: #ffe6e6;
+    }
+    .success {
+      color: green;
+      border-color: green;
+      background-color: #e6ffe6;
+    }
+    .loading {
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h2>Canvas LMS GraphQL Test</h2>
+  <div class="input-group">
+    <label for="canvasUrl">Canvas Instance URL:</label>
+    <input type="text" id="canvasUrl" placeholder="https://your-school.instructure.com" />
+    <small style="color: #666;">Leave empty to auto-detect from current tab</small>
+  </div>
+  <button id="fetchBtn">Fetch Courses</button>
+  <button id="diagnoseBtn" style="margin-top: 10px; background-color: #28a745;">Diagnose CSRF Token</button>
+  <div id="result"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
+
