@@ -194,22 +194,37 @@ class QueryHandler(BaseHTTPRequestHandler):
             
             # Check for exception in the result
             result_obj = response.get('result', {})
+            
+            # Debug: Check what we actually got
+            if not result_obj:
+                raise Exception(f"Empty result object. Full response: {json.dumps(response, indent=2)}")
             if result_obj.get('exceptionDetails'):
                 exception = result_obj.get('exceptionDetails', {})
                 error_msg = exception.get('exception', {}).get('description', 'Unknown error')
                 raise Exception(f"Script execution error: {error_msg}")
             
-            result_str = result_obj.get('value', '')
-            if result_str:
+            # Get the value - it should be a JSON string
+            # CDP returns result as: {"result": {"type": "string", "value": "..."}}
+            result_type = result_obj.get('type', 'unknown')
+            
+            # Check if 'value' key exists (even if it's an empty string)
+            if 'value' not in result_obj:
+                raise Exception(f"No 'value' key in result. Type: {result_type}, Full result_obj: {json.dumps(result_obj, indent=2)[:1000]}")
+            
+            result_str = result_obj['value']
+            
+            # result_str should be a string containing JSON
+            if isinstance(result_str, str):
+                if not result_str.strip():
+                    raise Exception(f"Result value is empty string. Type: {result_type}, Full result_obj: {json.dumps(result_obj, indent=2)[:500]}")
                 try:
                     result = json.loads(result_str)
                     return result
                 except json.JSONDecodeError as e:
-                    raise Exception(f"Failed to parse result as JSON: {result_str[:200]}... Error: {e}")
+                    raise Exception(f"Failed to parse result as JSON. First 200 chars: {result_str[:200]}... Error: {e}")
             else:
-                # Get more details about what was returned
-                result_type = result_obj.get('type', 'unknown')
-                raise Exception(f"No result from extension. Result type: {result_type}, Full response: {json.dumps(result_obj, indent=2)[:500]}")
+                # If it's not a string, return it directly (shouldn't happen but handle it)
+                return result_str
                 
         finally:
             ws.close()
