@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Native Messaging Test</title>
+</head>
+<body>
+    <h1>Native Messaging API Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function log(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            results.appendChild(p);
+            console.log(message);
+        }
+        
+        log('Testing Native Messaging API...');
+        log('');
+        
+        // Check if chrome.runtime exists
+        if (typeof chrome === 'undefined' || !chrome.runtime) {
+            log('❌ chrome.runtime is not available');
+            log('This page must be loaded as a Chrome extension page');
+        } else {
+            log('✓ chrome.runtime is available');
+            
+            // Check if connectNative exists
+            if (typeof chrome.runtime.connectNative === 'function') {
+                log('✓ chrome.runtime.connectNative is available');
+                
+                // Try to connect
+                try {
+                    const port = chrome.runtime.connectNative('com.canvasmcp.queryforwarder');
+                    log('✓ Successfully called connectNative()');
+                    
+                    port.onDisconnect.addListener(() => {
+                        if (chrome.runtime.lastError) {
+                            log('❌ Connection failed: ' + chrome.runtime.lastError.message);
+                        } else {
+                            log('⚠️ Connection closed (native host may not be running)');
+                        }
+                    });
+                    
+                    // Send a test message
+                    port.postMessage({ type: 'ping' });
+                    log('✓ Sent test message');
+                    
+                } catch (error) {
+                    log('❌ Error connecting: ' + error.message);
+                }
+            } else {
+                log('❌ chrome.runtime.connectNative is NOT available');
+                log('');
+                log('Possible reasons:');
+                log('1. Chrome needs to be RESTARTED after installing native host');
+                log('2. Native host manifest is missing or incorrect');
+                log('3. Extension ID mismatch in native host manifest');
+                log('4. Chrome version is too old (needs Chrome 26+)');
+            }
+        }
+    </script>
+</body>
+</html>
+

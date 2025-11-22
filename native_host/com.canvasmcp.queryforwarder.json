@@ -1,0 +1,10 @@
+{
+  "name": "com.canvasmcp.queryforwarder",
+  "description": "Native host for Canvas GraphQL Query Forwarder",
+  "path": "query_forwarder_host.py",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://YOUR_EXTENSION_ID_HERE/"
+  ]
+}
+

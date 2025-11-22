@@ -183,6 +183,110 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
     }
 });
 
+// Native Messaging connection
+let nativePort = null;
+
+// Connect to native host
+function connectNativeHost() {
+    // Debug: Check what's available
+    console.log('Checking native messaging availability...');
+    console.log('chrome.runtime exists:', !!chrome.runtime);
+    console.log('chrome.runtime.connectNative exists:', !!(chrome.runtime && chrome.runtime.connectNative));
+    console.log('Available chrome.runtime methods:', chrome.runtime ? Object.keys(chrome.runtime) : 'N/A');
+    
+    // Check if native messaging is available
+    if (!chrome.runtime) {
+        console.error('ERROR: chrome.runtime is not available!');
+        return;
+    }
+    
+    if (typeof chrome.runtime.connectNative !== 'function') {
+        console.error('ERROR: chrome.runtime.connectNative is not a function!');
+        console.error('This might mean:');
+        console.error('1. Chrome version is too old (needs Chrome 26+)');
+        console.error('2. Native host is not properly registered');
+        console.error('3. Extension ID mismatch in native host manifest');
+        console.error('4. Chrome needs to be restarted after installing native host');
+        console.error('');
+        console.error('Try:');
+        console.error('1. Restart Chrome completely');
+        console.error('2. Verify native host manifest exists and is correct');
+        console.error('3. Check that Extension ID matches in manifest');
+        // Don't retry if the API doesn't exist
+        return;
+    }
+    
+    try {
+        nativePort = chrome.runtime.connectNative('com.canvasmcp.queryforwarder');
+        
+        nativePort.onMessage.addListener((message) => {
+            console.log('Received message from native host:', message);
+            
+            // Handle messages from native host
+            if (message.type === 'query') {
+                // Native host is requesting a query execution
+                executeQuery({
+                    query: message.query,
+                    variables: message.variables || {},
+                    endpoint: message.endpoint
+                })
+                .then(result => {
+                    // Send result back to native host
+                    if (nativePort) {
+                        nativePort.postMessage({
+                            id: message.id,
+                            type: 'response',
+                            success: true,
+                            data: result
+                        });
+                    }
+                })
+                .catch(error => {
+                    // Send error back to native host
+                    if (nativePort) {
+                        nativePort.postMessage({
+                            id: message.id,
+                            type: 'response',
+                            success: false,
+                            error: {
+                                message: error.message,
+                                stack: error.stack
+                            }
+                        });
+                    }
+                });
+            } else if (message.type === 'ready') {
+                console.log('Native host ready:', message.message);
+            }
+        });
+        
+        nativePort.onDisconnect.addListener(() => {
+            console.log('Native host disconnected');
+            if (chrome.runtime.lastError) {
+                console.error('Disconnect error:', chrome.runtime.lastError.message);
+            }
+            nativePort = null;
+            // Try to reconnect after a delay
+            setTimeout(connectNativeHost, 5000);
+        });
+        
+        // Send connection confirmation
+        nativePort.postMessage({
+            type: 'connected',
+            message: 'Extension connected to native host'
+        });
+        
+        console.log('Connected to native host');
+    } catch (error) {
+        console.error('Failed to connect to native host:', error);
+        // Retry after delay
+        setTimeout(connectNativeHost, 5000);
+    }
+}
+
+// Connect on startup
+connectNativeHost();
+
 // Log that background script is loaded
 console.log('QueryForwarder background script loaded and ready');
 
